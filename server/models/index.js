@@ -1,91 +1,92 @@
-import mongoose from 'mongoose';
+import { Sequelize, DataTypes } from 'sequelize';
+import dotenv from 'dotenv';
 
-const userSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'manager', 'employee'], default: 'employee' },
-  department: { type: String, required: true },
-  managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  totalLeaves: { type: Number, default: 24 },
-  usedLeaves: { type: Number, default: 0 },
-}, { timestamps: true });
+dotenv.config();
 
-export const User = mongoose.model('User', userSchema);
+// Connect directly to Supabase via the Connection String
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+  dialect: 'postgres',
+  protocol: 'postgres',
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
+    }
+  },
+  logging: false // Keep the console clean
+});
 
-const projectSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  status: { type: String, enum: ['planning', 'in-progress', 'completed'], default: 'planning' },
-  managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  teamMembers: [{ 
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    role: String 
-  }],
-  progress: { type: Number, default: 0 },
-  description: String,
-  dueDate: { type: Date },
-}, { timestamps: true });
+const User = sequelize.define('User', {
+  name: { type: DataTypes.STRING, allowNull: false },
+  email: { type: DataTypes.STRING, allowNull: false, unique: true },
+  password: { type: DataTypes.STRING, allowNull: false },
+  role: { type: DataTypes.ENUM('admin', 'manager', 'employee'), defaultValue: 'employee' },
+  department: { type: DataTypes.STRING, allowNull: false },
+  totalLeaves: { type: DataTypes.INTEGER, defaultValue: 24 },
+  usedLeaves: { type: DataTypes.INTEGER, defaultValue: 0 }
+});
 
-export const Project = mongoose.model('Project', projectSchema);
+const Project = sequelize.define('Project', {
+  name: { type: DataTypes.STRING, allowNull: false },
+  status: { type: DataTypes.ENUM('planning', 'in-progress', 'completed'), defaultValue: 'planning' },
+  progress: { type: DataTypes.INTEGER, defaultValue: 0 },
+  description: { type: DataTypes.TEXT },
+  dueDate: { type: DataTypes.DATE }
+});
 
-const taskSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
-  status: { type: String, enum: ['todo', 'in-progress', 'done'], default: 'todo' },
-  dueDate: { type: Date },
-  contributionLog: [{ 
-    message: String, 
-    date: { type: Date, default: Date.now } 
-  }],
-}, { timestamps: true });
+const ProjectMember = sequelize.define('ProjectMember', {
+  role: { type: DataTypes.STRING }
+});
 
-export const Task = mongoose.model('Task', taskSchema);
+const Task = sequelize.define('Task', {
+  title: { type: DataTypes.STRING, allowNull: false },
+  status: { type: DataTypes.ENUM('todo', 'in-progress', 'done'), defaultValue: 'todo' },
+  dueDate: { type: DataTypes.DATE }
+});
 
-const leaveSchema = new mongoose.Schema({
-  employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-  startDate: { type: Date, required: true },
-  endDate: { type: Date, required: true },
-  reason: String,
-}, { timestamps: true });
+const Leave = sequelize.define('Leave', {
+  status: { type: DataTypes.ENUM('pending', 'approved', 'rejected'), defaultValue: 'pending' },
+  startDate: { type: DataTypes.DATE, allowNull: false },
+  endDate: { type: DataTypes.DATE, allowNull: false },
+  reason: { type: DataTypes.TEXT }
+});
 
-export const Leave = mongoose.model('Leave', leaveSchema);
+const Attendance = sequelize.define('Attendance', {
+  date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  status: { type: DataTypes.ENUM('present', 'absent', 'late'), allowNull: false }
+});
 
-const attendanceSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  date: { type: Date, default: Date.now },
-  status: { type: String, enum: ['present', 'absent', 'late'], required: true },
-}, { timestamps: true });
+const Feedback = sequelize.define('Feedback', {
+  type: { type: DataTypes.ENUM('general', 'incident', 'suggestion'), allowNull: false },
+  message: { type: DataTypes.TEXT, allowNull: false }
+});
 
-export const Attendance = mongoose.model('Attendance', attendanceSchema);
+// Relationships
+User.hasMany(User, { as: 'Employees', foreignKey: 'managerId' });
+User.belongsTo(User, { as: 'Manager', foreignKey: 'managerId' });
 
-const facilitySchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, 
-  type: { type: String, enum: ['seat', 'boardroom', 'conference'], required: true },
-  name: { type: String, required: true }, 
-  status: { type: String, enum: ['available', 'occupied', 'booked'], default: 'available' },
-  bookingTime: {
-    start: Date,
-    end: Date
-  }
-}, { timestamps: true });
+User.hasMany(Project, { as: 'ManagedProjects', foreignKey: 'managerId' });
+Project.belongsTo(User, { as: 'Manager', foreignKey: 'managerId' });
 
-export const Facility = mongoose.model('Facility', facilitySchema);
+Project.belongsToMany(User, { through: ProjectMember, as: 'TeamMembers' });
+User.belongsToMany(Project, { through: ProjectMember, as: 'JoinedProjects' });
 
-const notificationSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  message: { type: String, required: true },
-  read: { type: Boolean, default: false }
-}, { timestamps: true });
+Project.hasMany(Task, { foreignKey: 'projectId' });
+Task.belongsTo(Project, { foreignKey: 'projectId' });
 
-export const Notification = mongoose.model('Notification', notificationSchema);
+User.hasMany(Task, { foreignKey: 'assignedToId' });
+Task.belongsTo(User, { as: 'AssignedTo', foreignKey: 'assignedToId' });
 
-const feedbackSchema = new mongoose.Schema({
-  type: { type: String, enum: ['general', 'incident', 'suggestion'], required: true },
-  message: { type: String, required: true },
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-}, { timestamps: true });
+User.hasMany(Leave, { as: 'LeavesApplied', foreignKey: 'employeeId' });
+Leave.belongsTo(User, { as: 'Employee', foreignKey: 'employeeId' });
 
-export const Feedback = mongoose.model('Feedback', feedbackSchema);
+User.hasMany(Leave, { as: 'LeavesManaged', foreignKey: 'managerId' });
+Leave.belongsTo(User, { as: 'Manager', foreignKey: 'managerId' });
+
+User.hasMany(Attendance, { foreignKey: 'userId' });
+Attendance.belongsTo(User, { foreignKey: 'userId' });
+
+User.hasMany(Feedback, { foreignKey: 'createdById' });
+Feedback.belongsTo(User, { as: 'CreatedBy', foreignKey: 'createdById' });
+
+export { sequelize, User, Project, ProjectMember, Task, Leave, Attendance, Feedback };

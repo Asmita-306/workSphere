@@ -1,67 +1,120 @@
-import { Briefcase, ClipboardList, Calendar, Bell, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Briefcase, CheckCircle, Clock, Calendar, MessageSquare } from 'lucide-react';
+import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 
 const EmployeeDashboard = () => {
   const { user } = useAuth();
+  const [tasks, setTasks] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [tasksRes, projectsRes] = await Promise.all([
+          api.get('/tasks/my'),
+          api.get('/projects')
+        ]);
+        setTasks(tasksRes.data);
+        setProjects(projectsRes.data);
+      } catch (error) {
+        console.error('Error fetching employee dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const stats = [
-    { label: 'Active Projects', value: '3', icon: Briefcase, color: 'text-blue-600', bg: 'bg-blue-100' },
-    { label: 'Monthly Attendance', value: '22/24', icon: Calendar, color: 'text-green-600', bg: 'bg-green-100' },
-    { label: 'Tasks Completed', value: '15', icon: CheckCircle, color: 'text-purple-600', bg: 'bg-purple-100' },
-    { label: 'Unread Notifications', value: '4', icon: Bell, color: 'text-orange-600', bg: 'bg-orange-100' },
+    { label: 'Assigned Tasks', value: tasks.length, icon: Clock, color: 'text-blue-600', bg: 'bg-blue-100' },
+    { label: 'Completed Tasks', value: tasks.filter(t => t.status === 'done').length, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },
+    { label: 'Active Projects', value: projects.length, icon: Briefcase, color: 'text-purple-600', bg: 'bg-purple-100' },
+    { label: 'Remaining Leaves', value: (user.totalLeaves || 24) - (user.usedLeaves || 0), icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-100' },
   ];
+
+  const markPresent = async () => {
+    try {
+      await api.post('/attendance/checkin', { status: 'present' });
+      alert('Successfully checked in for today!');
+    } catch (error) {
+      alert(error.response?.data?.message || 'Check-in failed');
+    }
+  };
+
+  if (loading) return <div className="p-8">Loading your dashboard...</div>;
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Welcome, {user?.name}</h1>
-        <p className="text-gray-500">Here's your overview for today.</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Welcome, {user?.name}!</h1>
+          <p className="text-gray-500">Here's an overview of your work and progress.</p>
+        </div>
+        <button 
+          onClick={markPresent}
+          className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-bold shadow-lg shadow-blue-200 flex items-center gap-2"
+        >
+          <CheckCircle className="w-5 h-5" />
+          Mark Today's Attendance
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
-          <div key={stat.label} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`${stat.bg} p-3 rounded-lg`}>
-                <stat.icon className={`w-6 h-6 ${stat.color}`} />
-              </div>
+          <div key={stat.label} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+            <div className={`${stat.bg} w-12 h-12 rounded-xl flex items-center justify-center mb-4`}>
+              <stat.icon className={`w-6 h-6 ${stat.color}`} />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900">{stat.value}</h3>
-            <p className="text-sm text-gray-500">{stat.label}</p>
+            <h3 className="text-2xl font-black text-gray-900">{stat.value}</h3>
+            <p className="text-sm font-medium text-gray-400">{stat.label}</p>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Active Projects Summary */}
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-          <h2 className="text-lg font-bold mb-4">Quick Project View</h2>
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+          <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
+            <Briefcase className="w-5 h-5 text-gray-400" />
+            My Active Projects
+          </h2>
           <div className="space-y-4">
-            <div className="p-4 border rounded-lg hover:border-blue-500 transition cursor-pointer">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold">Cloud Migration</span>
-                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">In Progress</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '65%' }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Unread Notifications Summary */}
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-          <h2 className="text-lg font-bold mb-4">Recent Notifications</h2>
-          <div className="space-y-3">
-            {[1, 2].map((n) => (
-              <div key={n} className="flex gap-4 p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
-                <div className="w-2 h-2 mt-2 bg-blue-600 rounded-full"></div>
-                <div>
-                  <p className="text-sm font-medium">New task assigned by Manager Sarah</p>
-                  <p className="text-xs text-gray-400">2 hours ago</p>
+            {projects.map(p => (
+              <div key={p.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="font-bold text-gray-800">{p.name}</p>
+                  <span className="text-[10px] font-black uppercase text-blue-600">{p.progress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${p.progress}%` }}></div>
                 </div>
               </div>
             ))}
+            {projects.length === 0 && <p className="text-gray-400 italic">No projects assigned.</p>}
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+          <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-gray-400" />
+            Recent Tasks
+          </h2>
+          <div className="space-y-4">
+            {tasks.slice(0, 4).map(t => (
+              <div key={t.id} className="flex items-center justify-between p-4 bg-white border rounded-xl shadow-sm">
+                <div>
+                  <p className="font-bold text-gray-800">{t.title}</p>
+                  <p className="text-xs text-gray-400">{t.Project?.name}</p>
+                </div>
+                <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${
+                  t.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                }`}>
+                  {t.status}
+                </span>
+              </div>
+            ))}
+            {tasks.length === 0 && <p className="text-gray-400 italic">No tasks found.</p>}
           </div>
         </div>
       </div>

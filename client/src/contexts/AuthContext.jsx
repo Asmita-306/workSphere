@@ -9,7 +9,20 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        
+        // Safety Check: If the saved user has a string ID (MongoDB style), clear it.
+        // PostgreSQL IDs are numbers.
+        if (typeof parsedUser.id === 'string' && parsedUser.id.length > 10) {
+          console.log('Detected old MongoDB session. Clearing...');
+          logout();
+        } else {
+          setUser(parsedUser);
+        }
+      } catch (e) {
+        logout();
+      }
     }
     setLoading(false);
   }, []);

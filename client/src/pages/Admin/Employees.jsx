@@ -1,28 +1,61 @@
-import { useState } from 'react';
-import { Users, UserPlus, Mail, Shield, Briefcase, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, UserPlus, Trash2, Mail, Shield, Briefcase } from 'lucide-react';
+import api from '../../api/axios';
 
 const AdminEmployees = () => {
-  const [employees, setEmployees] = useState([
-    { id: '1', name: 'John Doe', email: 'john@example.com', role: 'employee', department: 'Engineering' },
-    { id: '2', name: 'Sarah Miller', email: 'sarah@example.com', role: 'manager', department: 'Engineering' },
-    { id: '3', name: 'Admin User', email: 'admin@example.com', role: 'admin', department: 'Management' },
-  ]);
-
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newEmp, setNewEmp] = useState({ name: '', email: '', role: 'employee', department: '' });
+  const [newEmp, setNewEmp] = useState({ 
+    name: '', 
+    email: '', 
+    password: 'password123', // Default password for new employees
+    role: 'employee', 
+    department: '' 
+  });
 
-  const handleAddEmployee = (e) => {
-    e.preventDefault();
-    setEmployees([...employees, { ...newEmp, id: Date.now().toString() }]);
-    setShowAddModal(false);
-    setNewEmp({ name: '', email: '', role: 'employee', department: '' });
-  };
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
 
-  const deleteEmployee = (id) => {
-    if (window.confirm('Are you sure you want to remove this employee?')) {
-      setEmployees(employees.filter(e => e.id !== id));
+  const fetchEmployees = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/users');
+      setEmployees(response.data);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleAddEmployee = async (e) => {
+    e.preventDefault();
+    try {
+      // We use the /auth/register route to create new users in the database
+      await api.post('/auth/register', newEmp);
+      alert('Employee added successfully! Default password is: password123');
+      setShowAddModal(false);
+      setNewEmp({ name: '', email: '', password: 'password123', role: 'employee', department: '' });
+      fetchEmployees();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to add employee');
+    }
+  };
+
+  const deleteEmployee = async (id) => {
+    if (window.confirm('Are you sure you want to remove this employee?')) {
+      try {
+        await api.delete(`/users/${id}`);
+        setEmployees(employees.filter(e => e.id !== id));
+      } catch (error) {
+        alert('Failed to delete employee');
+      }
+    }
+  };
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading employees...</div>;
 
   return (
     <div className="space-y-8">
@@ -41,49 +74,51 @@ const AdminEmployees = () => {
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b">
-              <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Role</th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Department</th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Email</th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {employees.map((emp) => (
-              <tr key={emp.id} className="hover:bg-gray-50 transition">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                      {emp.name.charAt(0)}
-                    </div>
-                    <span className="font-bold text-gray-900">{emp.name}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${
-                    emp.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                    emp.role === 'manager' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {emp.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{emp.department}</td>
-                <td className="px-6 py-4 text-sm text-gray-400">{emp.email}</td>
-                <td className="px-6 py-4 text-right">
-                  <button 
-                    onClick={() => deleteEmployee(emp.id)}
-                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b">
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Role</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Department</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {employees.map((emp) => (
+                <tr key={emp.id} className="hover:bg-gray-50 transition">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                        {emp.name.charAt(0)}
+                      </div>
+                      <span className="font-bold text-gray-900">{emp.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${
+                      emp.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                      emp.role === 'manager' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {emp.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">{emp.department}</td>
+                  <td className="px-6 py-4 text-sm text-gray-400">{emp.email}</td>
+                  <td className="px-6 py-4 text-right">
+                    <button 
+                      onClick={() => deleteEmployee(emp.id)}
+                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {showAddModal && (

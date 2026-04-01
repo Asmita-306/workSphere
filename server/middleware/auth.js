@@ -1,31 +1,35 @@
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
-
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+import { User } from '../models/index.js';
 
 export const protect = async (req, res, next) => {
   let token;
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
-      // PostgreSQL uses integer IDs in this setup
-      req.user = await prisma.user.findUnique({
-        where: { id: parseInt(decoded.id) },
-        select: { id: true, name: true, email: true, role: true, totalLeaves: true, usedLeaves: true, managerId: true }
+      // Log for debugging
+      console.log('Verifying token...');
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret123');
+      console.log('Token decoded, ID:', decoded.id);
+      
+      req.user = await User.findByPk(parseInt(decoded.id), {
+        attributes: ['id', 'name', 'email', 'role', 'totalLeaves', 'usedLeaves', 'managerId']
       });
       
-      if (!req.user) return res.status(401).json({ message: 'User not found' });
+      if (!req.user) {
+        console.log('User not found in DB for ID:', decoded.id);
+        return res.status(401).json({ message: 'User not found in current database' });
+      }
+
+      console.log('Auth successful for:', req.user.name);
       next();
     } catch (error) {
-      return res.status(401).json({ message: 'Not authorized, token failed' });
+      console.error('Auth Error:', error.message);
+      return res.status(401).json({ message: 'Not authorized, token failed: ' + error.message });
     }
   } else {
+    console.log('No token provided in headers');
     return res.status(401).json({ message: 'Not authorized, no token' });
   }
 };
