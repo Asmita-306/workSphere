@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['admin', 'manager', 'employee'], default: 'employee' },
   department: { type: String, required: true },
   managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  totalLeaves: { type: Number, default: 24 },
+  usedLeaves: { type: Number, default: 0 },
 }, { timestamps: true });
 
 export const User = mongoose.model('User', userSchema);

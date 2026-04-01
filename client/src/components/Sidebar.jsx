@@ -20,7 +20,7 @@ const Sidebar = () => {
     ],
     manager: [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/manager' },
-      { name: 'My Team', icon: Users, path: '/manager/team' },
+      { name: 'Teams', icon: Users, path: '/manager/team' },
       { name: 'Projects', icon: Briefcase, path: '/manager/projects' },
       { name: 'Leave Requests', icon: Calendar, path: '/manager/leaves' }, // Renamed from Leaves
       { name: 'Facilities', icon: Building2, path: '/manager/facilities' },

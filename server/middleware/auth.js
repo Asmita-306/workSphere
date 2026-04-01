@@ -1,5 +1,8 @@
 import jwt from 'jsonwebtoken';
-import { User } from '../models/index.js';
+import { PrismaClient } from '@prisma/client';
+import config from '../prisma.config.cjs';
+
+const prisma = new PrismaClient(config);
 
 export const protect = async (req, res, next) => {
   let token;
@@ -7,14 +10,20 @@ export const protect = async (req, res, next) => {
     try {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
+      
+      // PostgreSQL uses integer IDs in this setup
+      req.user = await prisma.user.findUnique({
+        where: { id: parseInt(decoded.id) },
+        select: { id: true, name: true, email: true, role: true, totalLeaves: true, usedLeaves: true, managerId: true }
+      });
+      
+      if (!req.user) return res.status(401).json({ message: 'User not found' });
       next();
     } catch (error) {
-      res.status(401).json({ message: 'Not authorized, token failed' });
+      return res.status(401).json({ message: 'Not authorized, token failed' });
     }
-  }
-  if (!token) {
-    res.status(401).json({ message: 'Not authorized, no token' });
+  } else {
+    return res.status(401).json({ message: 'Not authorized, no token' });
   }
 };
 

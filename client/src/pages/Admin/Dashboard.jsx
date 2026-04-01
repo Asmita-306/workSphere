@@ -30,7 +30,7 @@ const AdminDashboard = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 gap-8">
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
           <h2 className="text-lg font-bold mb-4">Recent Projects</h2>
           <div className="overflow-x-auto">
@@ -55,22 +55,6 @@ const AdminDashboard = () => {
                 </tr>
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-          <h2 className="text-lg font-bold mb-4">Leave Approvals Pending (Managers)</h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div>
-                <p className="font-bold">Manager Sarah (Eng)</p>
-                <p className="text-sm text-gray-500">2 days (Medical)</p>
-              </div>
-              <div className="flex gap-2">
-                <button className="px-3 py-1 bg-green-600 text-white rounded text-xs">Approve</button>
-                <button className="px-3 py-1 bg-red-600 text-white rounded text-xs">Reject</button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
