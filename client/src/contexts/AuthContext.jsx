@@ -14,7 +14,9 @@ export const AuthProvider = ({ children }) => {
         
         // Safety Check: If the saved user has a string ID (MongoDB style), clear it.
         // PostgreSQL IDs are numbers.
-        if (typeof parsedUser.id === 'string' && parsedUser.id.length > 10) {
+        const looksLikeMongoObjectId =
+          typeof parsedUser.id === 'string' && /^[a-f0-9]{24}$/i.test(parsedUser.id);
+        if (looksLikeMongoObjectId) {
           console.log('Detected old MongoDB session. Clearing...');
           logout();
         } else {

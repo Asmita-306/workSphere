@@ -48,7 +48,7 @@ const ManagerProjects = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredProjects.map((project) => (
-          <div key={project._id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition">
+          <div key={project.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition">
             <div className="flex justify-between items-start mb-4">
               <div className="bg-blue-100 p-3 rounded-xl text-blue-600">
                 <Briefcase className="w-6 h-6" />
@@ -84,7 +84,7 @@ const ManagerProjects = () => {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600 font-medium">
                   <Tag className="w-4 h-4 text-gray-400" />
-                  <span>{project.teamMembers?.length || 0} Members</span>
+                  <span>{project.TeamMembers?.length || 0} Members</span>
                 </div>
               </div>
             </div>

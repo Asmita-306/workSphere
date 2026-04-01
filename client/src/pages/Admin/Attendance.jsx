@@ -28,7 +28,7 @@ const AdminAttendance = () => {
     setSelectedEmployee(employee);
     setLoadingAttendance(true);
     try {
-      const response = await api.get(`/admin/attendance/${employee._id}`);
+      const response = await api.get(`/admin/attendance/${employee.id}`);
       setEmployeeAttendance(response.data);
     } catch (error) {
       console.error('Error fetching employee attendance:', error);
@@ -59,7 +59,7 @@ const AdminAttendance = () => {
             </thead>
             <tbody className="text-sm">
               {employees.map((emp) => (
-                <tr key={emp._id} className="border-b hover:bg-gray-50 transition">
+                <tr key={emp.id} className="border-b hover:bg-gray-50 transition">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">

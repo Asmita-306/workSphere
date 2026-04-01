@@ -31,7 +31,7 @@ const AdminFeedback = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {feedbacks.map((fb) => (
-          <div key={fb._id} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between">
+          <div key={fb.id} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
@@ -39,8 +39,8 @@ const AdminFeedback = () => {
                     <User className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-900">{fb.createdBy?.name || 'Anonymous'}</h3>
-                    <p className="text-xs text-gray-500">{fb.createdBy?.role} • {fb.createdBy?.department}</p>
+                    <h3 className="font-bold text-gray-900">{fb.CreatedBy?.name || 'Anonymous'}</h3>
+                    <p className="text-xs text-gray-500">{fb.CreatedBy?.role} • {fb.CreatedBy?.department}</p>
                   </div>
                 </div>
                 <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
@@ -61,7 +61,7 @@ const AdminFeedback = () => {
               </div>
               <div className="flex items-center gap-1">
                 <MessageSquare className="w-3 h-3" />
-                <span>ID: {fb._id.slice(-6)}</span>
+                <span>ID: {String(fb.id).padStart(6, '0')}</span>
               </div>
             </div>
           </div>

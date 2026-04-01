@@ -12,8 +12,8 @@ export const protect = async (req, res, next) => {
       
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret123');
       console.log('Token decoded, ID:', decoded.id);
-      
-      req.user = await User.findByPk(parseInt(decoded.id), {
+
+      req.user = await User.findByPk(decoded.id, {
         attributes: ['id', 'name', 'email', 'role', 'totalLeaves', 'usedLeaves', 'managerId']
       });
       

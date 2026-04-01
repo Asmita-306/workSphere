@@ -22,8 +22,8 @@ const ManagerTeams = () => {
       // Fetch tasks for each project
       const tasksMap = {};
       for (const project of projRes.data) {
-        const taskRes = await api.get(`/tasks/project/${project._id}`);
-        tasksMap[project._id] = taskRes.data;
+        const taskRes = await api.get(`/tasks/project/${project.id}`);
+        tasksMap[project.id] = taskRes.data;
       }
       setProjectTasks(tasksMap);
     } catch (error) {
@@ -38,7 +38,7 @@ const ManagerTeams = () => {
     try {
       await api.post('/tasks', {
         ...newTask,
-        projectId: selectedProject._id
+        projectId: selectedProject.id
       });
       alert('Task assigned successfully!');
       setShowTaskModal(false);
@@ -60,7 +60,7 @@ const ManagerTeams = () => {
 
       <div className="grid grid-cols-1 gap-8">
         {projects.map((project) => (
-          <div key={project._id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div key={project.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-6 bg-gray-50 border-b flex justify-between items-center">
               <div className="flex items-center gap-4">
                 <div className="bg-blue-600 p-2 rounded-lg text-white">
@@ -91,15 +91,15 @@ const ManagerTeams = () => {
                   Team Members
                 </h3>
                 <div className="space-y-4">
-                  {project.teamMembers?.map((member, idx) => (
+                  {project.TeamMembers?.map((member, idx) => (
                     <div key={idx} className="flex items-center justify-between p-4 bg-white border rounded-xl">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                          {member.user?.name?.charAt(0)}
+                          {member.name?.charAt(0)}
                         </div>
                         <div>
-                          <p className="font-bold">{member.user?.name}</p>
-                          <p className="text-xs text-gray-500">{member.role}</p>
+                          <p className="font-bold">{member.name}</p>
+                          <p className="text-xs text-gray-500">{member.ProjectMember?.role || 'member'}</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -118,8 +118,8 @@ const ManagerTeams = () => {
                   Assigned Tasks
                 </h3>
                 <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-                  {projectTasks[project._id]?.map((task) => (
-                    <div key={task._id} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                  {projectTasks[project.id]?.map((task) => (
+                    <div key={task.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                       <div className="flex justify-between items-start mb-2">
                         <p className="font-bold text-gray-800">{task.title}</p>
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
@@ -133,7 +133,7 @@ const ManagerTeams = () => {
                       <div className="flex justify-between items-center text-xs text-gray-500">
                         <div className="flex items-center gap-1">
                           <Users className="w-3 h-3" />
-                          <span>{task.assignedTo?.name}</span>
+                          <span>{task.AssignedTo?.name || 'Unassigned'}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -142,7 +142,7 @@ const ManagerTeams = () => {
                       </div>
                     </div>
                   ))}
-                  {(!projectTasks[project._id] || projectTasks[project._id].length === 0) && (
+                  {(!projectTasks[project.id] || projectTasks[project.id].length === 0) && (
                     <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                       <p className="text-gray-400 italic">No tasks assigned yet.</p>
                     </div>
@@ -183,8 +183,8 @@ const ManagerTeams = () => {
                   onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}
                 >
                   <option value="">Select Member</option>
-                  {selectedProject.teamMembers?.map((m) => (
-                    <option key={m.user._id} value={m.user._id}>{m.user.name} ({m.role})</option>
+                  {selectedProject.TeamMembers?.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name} ({m.ProjectMember?.role || 'member'})</option>
                   ))}
                 </select>
               </div>

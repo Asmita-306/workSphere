@@ -27,7 +27,7 @@ router.post('/register', async (req, res) => {
       password: hashedPassword,
       role: role || 'employee',
       department,
-      managerId: managerId ? parseInt(managerId) : null
+      managerId: managerId || null
     });
 
     res.status(201).json({

@@ -1,7 +1,18 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { sequelize, User, Project, ProjectMember, Task, Leave, Attendance, Feedback } from './models/index.js';
+import {
+  sequelize,
+  dbConnectionInfo,
+  User,
+  Project,
+  ProjectMember,
+  Task,
+  Leave,
+  Attendance,
+  Feedback
+} from './models/index.js';
+import { seedDefaultData } from './seed/defaultData.js';
 import authRoutes from './routes/auth.js';
 import { protect, authorizeRoles } from './middleware/auth.js';
 import { Op } from 'sequelize';
@@ -39,7 +50,7 @@ app.delete('/api/users/:id', protect, authorizeRoles('admin'), async (req, res) 
 app.get('/api/projects', protect, async (req, res) => {
   try {
     const include = [
-      { model: User, as: 'Manager', attributes: ['name', 'email'] },
+      { model: User, as: 'Manager', attributes: ['id', 'name', 'email'] },
       { model: User, as: 'TeamMembers', attributes: ['id', 'name', 'role'], through: { attributes: ['role'] } }
     ];
 
@@ -53,9 +64,9 @@ app.get('/api/projects', protect, async (req, res) => {
       projects = await Project.findAll({
         include: [
           { model: User, as: 'Manager', attributes: ['name', 'email'] },
-          { 
-            model: User, 
-            as: 'TeamMembers', 
+          {
+            model: User,
+            as: 'TeamMembers',
             attributes: ['id', 'name', 'role'],
             through: { attributes: ['role'] }
           }
@@ -102,8 +113,8 @@ app.post('/api/tasks', protect, authorizeRoles('admin', 'manager'), async (req, 
   try {
     const task = await Task.create({
       ...req.body,
-      assignedToId: req.body.assignedToId || req.body.assignedTo,
-      projectId: parseInt(req.body.projectId)
+      assignedTo: req.body.assignedTo ?? req.body.assignedToId,
+      projectId: req.body.projectId
     });
     res.status(201).json(task);
   } catch (err) {
@@ -126,7 +137,7 @@ app.get('/api/tasks/project/:projectId', protect, async (req, res) => {
 app.get('/api/tasks/my', protect, async (req, res) => {
   try {
     const tasks = await Task.findAll({
-      where: { assignedToId: req.user.id },
+      where: { assignedTo: req.user.id },
       include: [{ model: Project, attributes: ['name'] }]
     });
     res.json(tasks);
@@ -190,8 +201,8 @@ app.get('/api/admin/attendance', protect, authorizeRoles('admin'), async (req, r
       where: { date: { [Op.between]: [todayStart, todayEnd] } }
     });
 
-    const report = users.map(user => {
-      const record = attendance.find(a => a.userId === user.id);
+    const report = users.map((user) => {
+      const record = attendance.find((a) => a.userId === user.id);
       return {
         ...user.toJSON(),
         status: record ? record.status : 'absent'
@@ -283,7 +294,7 @@ app.put('/api/leave/:id', protect, authorizeRoles('admin', 'manager'), async (re
 // Feedback Routes
 app.post('/api/feedback', protect, async (req, res) => {
   try {
-    const feedback = await Feedback.create({ ...req.body, createdById: req.user.id });
+    const feedback = await Feedback.create({ ...req.body, createdBy: req.user.id });
     res.status(201).json(feedback);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -354,9 +365,35 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-sequelize.sync()
+sequelize
+  .authenticate()
+  .then(async () => {
+    if (process.env.DB_SYNC === 'true') {
+      await sequelize.sync({ alter: false });
+    }
+  })
+  .then(() => seedDefaultData())
   .then(() => {
-    console.log('PostgreSQL (Supabase) Database Synced');
+    console.log('PostgreSQL database connected and synced');
+    console.log('[DB]', dbConnectionInfo);
+    if (dbConnectionInfo.supabaseTransactionPooler) {
+      console.warn(
+        '[DB] Your URL uses Supabase transaction pooler (port 6543). If connections fail, copy the Direct connection string (port 5432, host db.xxx.supabase.co) from Supabase → Settings → Database.'
+      );
+    }
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
-  .catch(err => console.error('Unable to connect to the database:', err));
+  .catch((err) => {
+    console.error('Unable to connect to the database:', err.message || err);
+    console.error('[DB]', dbConnectionInfo);
+    if (err?.parent?.code === 'ECONNRESET' || err?.message?.includes('ECONNRESET')) {
+      console.error(`
+Hint: ECONNRESET with Supabase is often fixed by:
+  • Use Direct connection: port 5432, host db.<project-ref>.supabase.co (Settings → Database → Connection string → URI).
+  • Avoid mixing Transaction pooler (6543) with long-lived Node apps unless you know you need it.
+  • IPv4: DB_FORCE_IPV4=true is the default (uses IPv4 + ipv4first DNS). Set DB_FORCE_IPV4=false only if you must use IPv6.
+  • Password in .env must match the database password (no extra quotes). Reset it in Supabase if unsure.
+  • Local Postgres: DB_SSL=false and host localhost.`);
+    }
+    process.exit(1);
+  });

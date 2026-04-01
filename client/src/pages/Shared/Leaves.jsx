@@ -37,7 +37,7 @@ const Leaves = () => {
     try {
       await api.post('/leave', {
         ...newRequest,
-        managerId: user.managerId || '65f1a2b3c4d5e6f7a8b9c0d1' // Fallback
+        managerId: user.managerId || null
       });
       alert('Leave request submitted!');
       setNewRequest({ startDate: '', endDate: '', reason: '' });
@@ -62,7 +62,7 @@ const Leaves = () => {
   const canApprove = (req) => {
     if (user.role === 'admin') return true;
     if (user.role === 'manager') {
-      // For managers, we assume req.managerId matches user._id based on the backend query
+      // Manager-visible rows are filtered server-side.
       return true;
     }
     return false;
@@ -140,7 +140,7 @@ const Leaves = () => {
               </div>
             ) : (
               requests.map((req) => (
-                <div key={req._id} className="bg-white p-6 rounded-2xl border flex items-center justify-between shadow-sm hover:shadow-md transition border-l-4 border-l-blue-600">
+                <div key={req.id} className="bg-white p-6 rounded-2xl border flex items-center justify-between shadow-sm hover:shadow-md transition border-l-4 border-l-blue-600">
                   <div className="flex items-center gap-6">
                     <div className={`p-4 rounded-xl ${
                       req.status === 'approved' ? 'bg-green-100 text-green-600' : 
@@ -152,7 +152,7 @@ const Leaves = () => {
                     <div>
                       <div className="flex items-center gap-3">
                         <span className="font-bold text-gray-900 text-lg">
-                          {(user.role === 'admin' || user.role === 'manager') ? (req.employeeId?.name) : 'Leave Request'}
+                          {(user.role === 'admin' || user.role === 'manager') ? (req.Employee?.name) : 'Leave Request'}
                         </span>
                         {req.status === 'pending' && (
                           <span className="flex items-center gap-1 text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-black uppercase">
@@ -182,7 +182,7 @@ const Leaves = () => {
                     {canApprove(req) && req.status === 'pending' && (
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => handleAction(req._id, 'approved')}
+                          onClick={() => handleAction(req.id, 'approved')}
                           className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-bold"
                         >
                           <CheckCircle className="w-4 h-4" />
@@ -212,7 +212,7 @@ const Leaves = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-8 shadow-2xl">
             <h2 className="text-xl font-bold mb-4 text-gray-900">Reject Leave Request</h2>
-            <p className="text-sm text-gray-500 mb-6">Please provide a reason for rejecting the leave request from <strong>{selectedRequest?.employeeId?.name}</strong>.</p>
+            <p className="text-sm text-gray-500 mb-6">Please provide a reason for rejecting the leave request from <strong>{selectedRequest?.Employee?.name}</strong>.</p>
             
             <div className="space-y-4">
               <div>
@@ -236,7 +236,7 @@ const Leaves = () => {
                   Cancel
                 </button>
                 <button 
-                  onClick={() => handleAction(selectedRequest._id, 'rejected', rejectionComment)}
+                  onClick={() => handleAction(selectedRequest.id, 'rejected', rejectionComment)}
                   className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-lg shadow-red-200"
                 >
                   Confirm Rejection

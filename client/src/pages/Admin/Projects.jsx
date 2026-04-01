@@ -48,7 +48,7 @@ const AdminProjects = () => {
 
       <div className="grid grid-cols-1 gap-6">
         {filteredProjects.map((project) => (
-          <div key={project._id} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+          <div key={project.id} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
             <div className="flex flex-col lg:flex-row justify-between gap-6">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-4">
@@ -65,7 +65,7 @@ const AdminProjects = () => {
                       }`}>
                         {project.status.toUpperCase()}
                       </span>
-                      <span className="text-sm text-gray-500">• Controlled by: <span className="font-bold text-gray-700">{project.managerId?.name || 'Unassigned'}</span></span>
+                      <span className="text-sm text-gray-500">• Controlled by: <span className="font-bold text-gray-700">{project.Manager?.name || 'Unassigned'}</span></span>
                     </div>
                   </div>
                 </div>
@@ -89,7 +89,7 @@ const AdminProjects = () => {
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-bold text-gray-900 flex items-center gap-2">
                     <Users className="w-4 h-4" />
-                    Team Members ({project.teamMembers?.length || 0})
+                    Team Members ({project.TeamMembers?.length || 0})
                   </h4>
                   <div className="flex items-center gap-1 text-red-600 text-sm">
                     <Calendar className="w-4 h-4" />
@@ -97,11 +97,11 @@ const AdminProjects = () => {
                   </div>
                 </div>
                 <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
-                  {project.teamMembers?.map((member, idx) => (
+                  {project.TeamMembers?.map((member, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                       <div>
-                        <p className="text-sm font-bold">{member.user?.name || 'Unknown'}</p>
-                        <p className="text-xs text-gray-500">{member.role}</p>
+                        <p className="text-sm font-bold">{member.name || 'Unknown'}</p>
+                        <p className="text-xs text-gray-500">{member.ProjectMember?.role || 'member'}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] text-gray-400 uppercase">Progress</p>
@@ -109,7 +109,7 @@ const AdminProjects = () => {
                       </div>
                     </div>
                   ))}
-                  {(!project.teamMembers || project.teamMembers.length === 0) && (
+                  {(!project.TeamMembers || project.TeamMembers.length === 0) && (
                     <p className="text-sm text-gray-500 italic">No members assigned yet.</p>
                   )}
                 </div>
