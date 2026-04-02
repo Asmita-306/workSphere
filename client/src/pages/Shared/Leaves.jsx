@@ -5,7 +5,8 @@ import api from '../../api/axios';
 
 const Leaves = () => {
   const { user } = useAuth();
-  const [requests, setRequests] = useState([]);
+  const [myLeaves, setMyLeaves] = useState([]);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newRequest, setNewRequest] = useState({ startDate: '', endDate: '', reason: '' });
   const [showRejectionModal, setShowRejectionModal] = useState(false);
@@ -19,12 +20,22 @@ const Leaves = () => {
   const fetchLeaves = async () => {
     try {
       setLoading(true);
-      let endpoint = '/leave/my';
-      if (user.role === 'admin' || user.role === 'manager') {
-        endpoint = '/leave/pending';
+
+      if (user.role === 'employee') {
+        const myLeavesRes = await api.get('/leave/my');
+        setMyLeaves(myLeavesRes.data || []);
+        setPendingApprovals([]);
+        return;
       }
-      const response = await api.get(endpoint);
-      setRequests(response.data);
+
+      // admin + manager: show "my" leaves separately, plus team pending approvals separately
+      const [myLeavesRes, pendingRes] = await Promise.all([
+        api.get('/leave/my').catch(() => ({ data: [] })),
+        api.get('/leave/pending').catch(() => ({ data: [] }))
+      ]);
+
+      setMyLeaves(myLeavesRes.data || []);
+      setPendingApprovals(pendingRes.data || []);
     } catch (error) {
       console.error('Error fetching leaves:', error);
     } finally {
@@ -60,11 +71,21 @@ const Leaves = () => {
   };
 
   const canApprove = (req) => {
-    if (user.role === 'admin') return true;
-    if (user.role === 'manager') {
-      // Manager-visible rows are filtered server-side.
-      return true;
+    const approvals = req.LeaveApprovals || req.LeaveApproval || [];
+
+    if (user.role === 'admin') {
+      // Admin can approve their own HR step.
+      // Admin/HR approves only the HR step.
+      return approvals.some((a) => a.level === 'hr' && a.status === 'pending');
     }
+
+    if (user.role === 'manager') {
+      // Manager cannot approve their own requests.
+      if (req.employeeId === user.id) return false;
+      // Manager approves only the manager step.
+      return approvals.some((a) => a.level === 'manager' && a.status === 'pending');
+    }
+
     return false;
   };
 
@@ -89,33 +110,33 @@ const Leaves = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {user.role !== 'admin' && user.role !== 'manager' && (
-          <div className="bg-white p-6 rounded-xl border shadow-sm h-fit">
+        {user.role !== 'admin' && (
+          <div className="bg-white p-6 rounded-xl border shadow-sm h-fit lg:sticky lg:top-8">
             <h2 className="text-lg font-bold mb-4">Apply for Leave</h2>
             <form onSubmit={handleApply} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Start Date</label>
-                <input 
+                <input
                   type="date" required
-                  className="mt-1 block w-full px-4 py-2 bg-gray-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" 
+                  className="mt-1 block w-full px-4 py-2 bg-gray-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                   value={newRequest.startDate}
                   onChange={(e) => setNewRequest({ ...newRequest, startDate: e.target.value })}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">End Date</label>
-                <input 
+                <input
                   type="date" required
-                  className="mt-1 block w-full px-4 py-2 bg-gray-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" 
+                  className="mt-1 block w-full px-4 py-2 bg-gray-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                   value={newRequest.endDate}
                   onChange={(e) => setNewRequest({ ...newRequest, endDate: e.target.value })}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Reason</label>
-                <textarea 
+                <textarea
                   required rows="3"
-                  className="mt-1 block w-full px-4 py-2 bg-gray-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" 
+                  className="mt-1 block w-full px-4 py-2 bg-gray-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                   value={newRequest.reason}
                   onChange={(e) => setNewRequest({ ...newRequest, reason: e.target.value })}
                   placeholder="Reason for leave..."
@@ -128,18 +149,100 @@ const Leaves = () => {
           </div>
         )}
 
-        <div className={`space-y-6 ${(user.role === 'admin' || user.role === 'manager') ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
-          <h2 className="text-lg font-bold mb-4">
-            {user.role === 'employee' ? 'My History' : 'Requests Awaiting Approval'}
-          </h2>
-          <div className="space-y-4">
-            {requests.length === 0 ? (
-              <div className="bg-gray-50 border-2 border-dashed rounded-xl p-12 text-center text-gray-400">
-                <Calendar className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                <p>No leave requests found.</p>
-              </div>
-            ) : (
-              requests.map((req) => (
+        <div className={`space-y-8 ${user.role === 'admin' ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
+          {/* My leaves */}
+          <section className="space-y-4">
+            <h2 className="text-lg font-bold">
+              {user.role === 'employee' ? 'My History' : 'My Leave Requests'}
+            </h2>
+            <div className="space-y-4">
+              {myLeaves.length === 0 ? (
+                <div className="bg-gray-50 border-2 border-dashed rounded-xl p-12 text-center text-gray-400">
+                  <Calendar className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p>No leave requests found.</p>
+                </div>
+              ) : (
+                myLeaves.map((req) => {
+                  const isSelf = String(req.employeeId) === String(user.id);
+                  return (
+                    <div key={req.id} className="bg-white p-6 rounded-2xl border flex items-center justify-between shadow-sm hover:shadow-md transition border-l-4 border-l-blue-600">
+                      <div className="flex items-center gap-6">
+                        <div className={`p-4 rounded-xl ${req.status === 'approved' ? 'bg-green-100 text-green-600' : req.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                          <Calendar className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-bold text-gray-900 text-lg">
+                              {isSelf ? 'Personal Request' : (req.Employee?.name || 'Leave Request')}
+                            </span>
+                            {req.status === 'pending' && (
+                              <span className="flex items-center gap-1 text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-black uppercase">
+                                <Clock className="w-3 h-3" />
+                                Awaiting
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500 font-medium">
+                            {new Date(req.startDate).toLocaleDateString()} — {new Date(req.endDate).toLocaleDateString()}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <MessageSquare className="w-3 h-3 text-gray-400" />
+                            <p className="text-xs text-gray-400 italic">"{req.reason}"</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-4">
+                        <span className={`text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest ${req.status === 'approved' ? 'bg-green-100 text-green-700' : req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {req.status}
+                        </span>
+
+                        {canApprove(req) && req.status === 'pending' && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleAction(req.id, 'approved')}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-bold"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedRequest(req);
+                                setShowRejectionModal(true);
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-xs font-bold"
+                            >
+                              <XCircle className="w-4 h-4" />
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          {/* Team / approvals */}
+          {user.role !== 'employee' && (
+            <section className="space-y-4">
+              <h2 className="text-lg font-bold">
+                {user.role === 'admin' ? 'HR Pending Approvals' : 'Team Pending Approvals'}
+              </h2>
+              <div className="space-y-4">
+                {pendingApprovals
+                  .filter((req) => String(req.employeeId) !== String(user.id))
+                  .length === 0 ? (
+                  <div className="bg-gray-50 border-2 border-dashed rounded-xl p-12 text-center text-gray-400">
+                    <p>No pending approvals.</p>
+                  </div>
+                ) : (
+                  pendingApprovals
+                    .filter((req) => String(req.employeeId) !== String(user.id))
+                    .map((req) => (
                 <div key={req.id} className="bg-white p-6 rounded-2xl border flex items-center justify-between shadow-sm hover:shadow-md transition border-l-4 border-l-blue-600">
                   <div className="flex items-center gap-6">
                     <div className={`p-4 rounded-xl ${
@@ -152,7 +255,7 @@ const Leaves = () => {
                     <div>
                       <div className="flex items-center gap-3">
                         <span className="font-bold text-gray-900 text-lg">
-                          {(user.role === 'admin' || user.role === 'manager') ? (req.Employee?.name) : 'Leave Request'}
+                          {req.Employee?.name || 'Leave Request'}
                         </span>
                         {req.status === 'pending' && (
                           <span className="flex items-center gap-1 text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-black uppercase">
@@ -203,8 +306,10 @@ const Leaves = () => {
                   </div>
                 </div>
               ))
-            )}
-          </div>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       </div>
 

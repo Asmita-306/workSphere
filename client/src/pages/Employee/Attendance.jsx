@@ -9,17 +9,18 @@ const EmployeeAttendance = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
+  const fetchAttendance = async () => {
+    try {
+      const response = await api.get('/attendance/my');
+      setAttendance(response.data || []);
+    } catch (error) {
+      console.error('Error fetching attendance:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchAttendance = async () => {
-      try {
-        const response = await api.get('/attendance/my');
-        setAttendance(response.data);
-      } catch (error) {
-        console.error('Error fetching attendance:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchAttendance();
   }, []);
 
@@ -34,6 +35,18 @@ const EmployeeAttendance = () => {
 
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
+
+  const markPresent = async () => {
+    setLoading(true);
+    try {
+      await api.post('/attendance/checkin', { status: 'present' });
+      await fetchAttendance();
+      alert('Successfully checked in for today!');
+    } catch (error) {
+      alert(error.response?.data?.message || 'Check-in failed');
+      setLoading(false);
+    }
+  };
 
   if (loading) return <div className="p-8">Loading attendance...</div>;
 
@@ -66,6 +79,15 @@ const EmployeeAttendance = () => {
             <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-full transition"><ChevronLeft /></button>
             <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-full transition"><ChevronRight /></button>
           </div>
+        </div>
+
+        <div className="flex justify-end mb-6">
+          <button
+            onClick={markPresent}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold shadow-sm"
+          >
+            Mark Today as Present
+          </button>
         </div>
 
         <div className="grid grid-cols-7 gap-4 mb-4">

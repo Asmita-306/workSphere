@@ -14,12 +14,27 @@ export const protect = async (req, res, next) => {
       console.log('Token decoded, ID:', decoded.id);
 
       req.user = await User.findByPk(decoded.id, {
-        attributes: ['id', 'name', 'email', 'role', 'totalLeaves', 'usedLeaves', 'managerId']
+        attributes: [
+          'id',
+          'name',
+          'email',
+          'role',
+          'department',
+          'totalLeaves',
+          'usedLeaves',
+          'managerId',
+          'archived',
+          'archivedAt'
+        ]
       });
       
       if (!req.user) {
         console.log('User not found in DB for ID:', decoded.id);
         return res.status(401).json({ message: 'User not found in current database' });
+      }
+
+      if (req.user.archived) {
+        return res.status(401).json({ message: 'Account is archived' });
       }
 
       console.log('Auth successful for:', req.user.name);

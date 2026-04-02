@@ -2,7 +2,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Briefcase, Calendar, 
   ClipboardList, MessageSquare, Bell, Settings, LogOut,
-  Building2
+  Building2,
+  Heart,
+  Megaphone
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -16,7 +18,11 @@ const Sidebar = () => {
       { name: 'Employees', icon: Users, path: '/admin/employees' },
       { name: 'Projects', icon: Briefcase, path: '/admin/projects' },
       { name: 'Attendance', icon: ClipboardList, path: '/admin/attendance' },
+      { name: 'Leave Requests', icon: Calendar, path: '/admin/leaves' },
       { name: 'Feedback', icon: MessageSquare, path: '/admin/feedback' },
+      { name: 'Assets & Maintenance', icon: Building2, path: '/admin/assets' },
+      { name: 'Overwork Risks', icon: Users, path: '/admin/overwork-risks' },
+      { name: 'Seating', icon: Building2, path: '/seating' }
     ],
     manager: [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/manager' },
@@ -24,6 +30,10 @@ const Sidebar = () => {
       { name: 'Projects', icon: Briefcase, path: '/manager/projects' },
       { name: 'Leave Requests', icon: Calendar, path: '/manager/leaves' }, // Renamed from Leaves
       { name: 'Facilities', icon: Building2, path: '/manager/facilities' },
+      { name: 'Attendance', icon: ClipboardList, path: '/manager/attendance' },
+      { name: 'Wellness', icon: Heart, path: '/manager/wellness' },
+      { name: 'Announcements', icon: Megaphone, path: '/manager/announcements' },
+      { name: 'Seating', icon: Building2, path: '/seating' }
     ],
     employee: [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/employee' },
@@ -33,6 +43,9 @@ const Sidebar = () => {
       { name: 'Attendance', icon: ClipboardList, path: '/employee/attendance' },
       { name: 'Facilities', icon: Building2, path: '/employee/facilities' },
       { name: 'Feedback', icon: MessageSquare, path: '/employee/feedback' },
+      { name: 'My Assets', icon: Building2, path: '/employee/assets' },
+      { name: 'Wellness', icon: Heart, path: '/employee/wellness' },
+      { name: 'Seating', icon: Building2, path: '/seating' }
     ]
   };
 

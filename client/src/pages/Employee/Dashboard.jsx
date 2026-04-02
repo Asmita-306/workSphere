@@ -7,17 +7,20 @@ const EmployeeDashboard = () => {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tasksRes, projectsRes] = await Promise.all([
+        const [tasksRes, projectsRes, assetsRes] = await Promise.all([
           api.get('/tasks/my'),
-          api.get('/projects')
+          api.get('/projects'),
+          api.get('/assets/my').catch(() => ({ data: [] }))
         ]);
         setTasks(tasksRes.data);
         setProjects(projectsRes.data);
+        setAssets(assetsRes.data || []);
       } catch (error) {
         console.error('Error fetching employee dashboard data:', error);
       } finally {
@@ -117,6 +120,36 @@ const EmployeeDashboard = () => {
             {tasks.length === 0 && <p className="text-gray-400 italic">No tasks found.</p>}
           </div>
         </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+        <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
+          <Briefcase className="w-5 h-5 text-gray-400" />
+          My Assets
+        </h2>
+        {assets.length === 0 ? (
+          <p className="text-gray-400 italic">No assets assigned.</p>
+        ) : (
+          <div className="space-y-3">
+            {assets.map((a) => (
+              <div key={a.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-gray-900">{a.assetType}</p>
+                  <p className="text-xs text-gray-500">
+                    Assigned: {a.assignedDate ? new Date(a.assignedDate).toLocaleDateString() : 'N/A'}
+                  </p>
+                </div>
+                <span className={`text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest ${
+                  (a.status || '').toLowerCase() === 'assigned'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-orange-100 text-orange-700'
+                }`}>
+                  {a.status || 'Unknown'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

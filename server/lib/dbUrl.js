@@ -21,6 +21,14 @@ export function normalizePostgresUrl(url) {
     const u = new URL(url.replace(/^postgresql:/i, 'http:').replace(/^postgres:/i, 'http:'));
     u.searchParams.delete('sslmode');
     u.searchParams.delete('ssl');
+
+    // Supabase "transaction pooler" host (pooler.*) can cause issues for some clients.
+    // Prefer direct connection host (db.*) and default port 5432.
+    if (/pooler\./i.test(u.hostname) && /\.supabase\.co$/i.test(u.hostname)) {
+      u.hostname = u.hostname.replace(/^pooler\./i, 'db.');
+      if (u.port === '6543') u.port = '5432';
+    }
+
     return u.toString().replace(/^http:/i, 'postgres:');
   } catch {
     return url;

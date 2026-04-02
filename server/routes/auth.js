@@ -1,7 +1,8 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/index.js';
+import { User, PasswordResetToken, Asset, AssetCustodyHistory } from '../models/index.js';
 
 const router = express.Router();
 
@@ -29,6 +30,29 @@ router.post('/register', async (req, res) => {
       department,
       managerId: managerId || null
     });
+
+    // Default asset assignment: every employee gets one laptop.
+    if (user.role === 'employee') {
+      const existingLaptop = await Asset.findOne({
+        where: { assignedEmployeeId: user.id, assetType: 'Laptop' }
+      });
+
+      if (!existingLaptop) {
+        const asset = await Asset.create({
+          assetType: 'Laptop',
+          assignedEmployeeId: user.id,
+          status: 'Assigned',
+          assignedDate: new Date()
+        });
+        await AssetCustodyHistory.create({
+          assetId: asset.id,
+          employeeId: user.id,
+          assignedAt: new Date(),
+          releasedAt: null,
+          reason: 'Default laptop assignment on employee onboarding'
+        });
+      }
+    }
 
     res.status(201).json({
       id: user.id,
@@ -58,6 +82,81 @@ router.post('/login', async (req, res) => {
     } else {
       res.status(401).json({ message: 'Invalid email or password' });
     }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Forgot password (backend only; frontend UI needs to be added separately)
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ message: 'email is required' });
+
+    const user = await User.findOne({ where: { email } });
+
+    // Avoid account enumeration
+    if (!user) {
+      return res.json({ message: 'If the account exists, a reset token has been generated.' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await PasswordResetToken.create({
+      tokenHash,
+      userId: user.id,
+      expiresAt,
+      used: false,
+      usedAt: null
+    });
+
+    // NOTE: Without email sending, the token is returned to the client for now.
+    // In production, you should email the reset link/token instead.
+    return res.json({
+      message: 'If the account exists, a reset token has been generated.',
+      resetToken: token
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// Reset password
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body || {};
+    if (!resetToken || !newPassword) {
+      return res.status(400).json({ message: 'resetToken and newPassword are required' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const tokenRecord = await PasswordResetToken.findOne({ where: { tokenHash } });
+
+    if (!tokenRecord || tokenRecord.used) {
+      return res.status(400).json({ message: 'Invalid or already used reset token' });
+    }
+
+    if (new Date(tokenRecord.expiresAt) < new Date()) {
+      return res.status(400).json({ message: 'Reset token has expired' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await User.update(
+      { password: hashedPassword },
+      { where: { id: tokenRecord.userId } }
+    );
+
+    tokenRecord.used = true;
+    tokenRecord.usedAt = new Date();
+    await tokenRecord.save();
+
+    res.json({ message: 'Password updated successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

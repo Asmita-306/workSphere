@@ -6,9 +6,13 @@ const ManagerTeams = () => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showMemberModal, setShowMemberModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [newTask, setNewTask] = useState({ title: '', assignedTo: '', dueDate: '' });
   const [projectTasks, setProjectTasks] = useState({});
+  const [allEmployees, setAllEmployees] = useState([]);
+  const [newMember, setNewMember] = useState({ userId: '', role: 'member' });
+  const [isAddingMember, setIsAddingMember] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -16,14 +20,25 @@ const ManagerTeams = () => {
 
   const fetchData = async () => {
     try {
-      const projRes = await api.get('/projects');
+      const [projRes, usersRes] = await Promise.all([
+        api.get('/projects'),
+        api.get('/users').catch(() => ({ data: [] }))
+      ]);
       setProjects(projRes.data);
+      
+      // Filter employees for the dropdown
+      const employees = usersRes.data.filter(u => u.role === 'employee');
+      setAllEmployees(employees);
       
       // Fetch tasks for each project
       const tasksMap = {};
       for (const project of projRes.data) {
-        const taskRes = await api.get(`/tasks/project/${project.id}`);
-        tasksMap[project.id] = taskRes.data;
+        try {
+          const taskRes = await api.get(`/tasks/project/${project.id}`);
+          tasksMap[project.id] = taskRes.data;
+        } catch (e) {
+          console.error(`Error tasks for ${project.id}`, e);
+        }
       }
       setProjectTasks(tasksMap);
     } catch (error) {
@@ -49,6 +64,29 @@ const ManagerTeams = () => {
     }
   };
 
+  const handleAddMember = async (e) => {
+    e.preventDefault();
+    if (!newMember.userId) return;
+    
+    setIsAddingMember(true);
+    try {
+      // Assuming endpoint exists for adding members
+      await api.post(`/projects/${selectedProject.id}/members`, {
+        userId: newMember.userId,
+        role: newMember.role
+      });
+      alert('Member added to project successfully!');
+      setShowMemberModal(false);
+      setNewMember({ userId: '', role: 'member' });
+      fetchData(); // Refresh projects to show new member
+    } catch (error) {
+      console.error('Failed to add member:', error);
+      alert('Failed to add member (is there a backend endpoint for /api/projects/:id/members?)');
+    } finally {
+      setIsAddingMember(false);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center">Loading teams and tasks...</div>;
 
   return (
@@ -71,16 +109,28 @@ const ManagerTeams = () => {
                   <p className="text-sm text-gray-500">Status: <span className="capitalize font-bold text-blue-600">{project.status}</span></p>
                 </div>
               </div>
-              <button 
-                onClick={() => {
-                  setSelectedProject(project);
-                  setShowTaskModal(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold"
-              >
-                <Plus className="w-5 h-5" />
-                Assign Task
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => {
+                    setSelectedProject(project);
+                    setShowMemberModal(true);
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-bold text-sm border border-gray-200"
+                >
+                  <Users className="w-4 h-4" />
+                  Add Member
+                </button>
+                <button 
+                  onClick={() => {
+                    setSelectedProject(project);
+                    setShowTaskModal(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  Assign Task
+                </button>
+              </div>
             </div>
 
             <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -90,7 +140,7 @@ const ManagerTeams = () => {
                   <Users className="w-5 h-5 text-gray-400" />
                   Team Members
                 </h3>
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                   {project.TeamMembers?.map((member, idx) => (
                     <div key={idx} className="flex items-center justify-between p-4 bg-white border rounded-xl">
                       <div className="flex items-center gap-3">
@@ -98,16 +148,17 @@ const ManagerTeams = () => {
                           {member.name?.charAt(0)}
                         </div>
                         <div>
-                          <p className="font-bold">{member.name}</p>
+                          <p className="font-bold text-sm">{member.name}</p>
                           <p className="text-xs text-gray-500">{member.ProjectMember?.role || 'member'}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-400 uppercase font-bold">Project Progress</p>
-                        <p className="text-sm font-black text-blue-600">{project.progress}%</p>
-                      </div>
                     </div>
                   ))}
+                  {(!project.TeamMembers || project.TeamMembers.length === 0) && (
+                    <div className="text-center py-4 text-gray-400 italic text-sm">
+                      No members in this project yet.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -210,6 +261,65 @@ const ManagerTeams = () => {
                   className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700"
                 >
                   Confirm Assignment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showMemberModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-8 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold">Add Member to {selectedProject?.name}</h2>
+              <button onClick={() => setShowMemberModal(false)} className="text-gray-400 hover:text-gray-600">
+                <AlertCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleAddMember} className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Select Employee</label>
+                <select 
+                  required
+                  className="w-full p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newMember.userId}
+                  onChange={(e) => setNewMember({ ...newMember, userId: e.target.value })}
+                >
+                  <option value="">Choose an employee...</option>
+                  {allEmployees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+                {allEmployees.length === 0 && (
+                  <p className="text-xs text-orange-500 mt-2">No employees available. Ensure they have 'employee' role.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Role</label>
+                <input 
+                  type="text" required
+                  className="w-full p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newMember.role}
+                  onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
+                  placeholder="e.g. Developer, Designer"
+                />
+              </div>
+              
+              <div className="flex gap-4">
+                <button 
+                  type="button" 
+                  onClick={() => setShowMemberModal(false)}
+                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isAddingMember || !newMember.userId}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isAddingMember ? 'Adding...' : 'Add Member'}
                 </button>
               </div>
             </form>

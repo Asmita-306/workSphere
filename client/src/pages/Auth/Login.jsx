@@ -61,6 +61,14 @@ const Login = () => {
           >
             Sign In
           </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/forgot-password')}
+            className="w-full text-center text-sm font-medium text-blue-600 hover:underline"
+          >
+            Forgot password?
+          </button>
         </form>
       </div>
     </div>
