@@ -62,10 +62,6 @@ const EmployeeAttendance = () => {
             <p className="text-[10px] text-green-600 uppercase font-bold">Used</p>
             <p className="text-xl font-bold text-green-700">{user.usedLeaves || 0}</p>
           </div>
-          <div className="bg-blue-50 px-4 py-2 rounded-lg border border-blue-100 text-center">
-            <p className="text-[10px] text-blue-600 uppercase font-bold">Remaining</p>
-            <p className="text-xl font-bold text-blue-700">{(user.totalLeaves || 24) - (user.usedLeaves || 0)}</p>
-          </div>
         </div>
       </div>
 

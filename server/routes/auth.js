@@ -73,10 +73,16 @@ router.post('/login', async (req, res) => {
 
     if (user && (await bcrypt.compare(password, user.password))) {
       res.json({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          department: user.department,
+          managerId: user.managerId,
+          totalLeaves: user.totalLeaves,
+          usedLeaves: user.usedLeaves,
+        },
         token: generateToken(user.id),
       });
     } else {

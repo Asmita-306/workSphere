@@ -17,6 +17,9 @@ const Seating = () => {
   const [loading, setLoading] = useState(true);
   const [seats, setSeats] = useState([]);
   const [assigning, setAssigning] = useState(false);
+  const [assigningSeat, setAssigningSeat] = useState(null);
+  const [employees, setEmployees] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
 
   const cubicles = useMemo(() => buildDefaultCubicles(), []);
   const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager';
@@ -33,9 +36,21 @@ const Seating = () => {
     }
   };
 
+  const fetchEmployees = async () => {
+    if (!isAdminOrManager) return;
+    try {
+      const res = await api.get('/users');
+      setEmployees(res.data || []);
+    } catch (e) {
+      console.error('Failed to load users for seating', e);
+    }
+  };
+
   useEffect(() => {
     fetchSeating();
-  }, []);
+    fetchEmployees();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminOrManager]);
 
   const seatByCubicle = useMemo(() => {
     const m = new Map();
@@ -43,13 +58,20 @@ const Seating = () => {
     return m;
   }, [seats]);
 
-  const assign = async (cubicleId) => {
+  const openAssign = (cubicleId) => {
     if (!isAdminOrManager) return;
-    const userId = prompt('Enter employee userId to assign (leave empty to free):', '');
+    setAssigningSeat(cubicleId);
+    setSelectedUserId('');
+  };
+
+  const confirmAssign = async () => {
+    if (!assigningSeat) return;
     setAssigning(true);
     try {
-      await api.patch(`/seating/${cubicleId}`, { userId: userId?.trim() || null });
+      await api.patch(`/seating/${assigningSeat}`, { userId: selectedUserId || null });
       await fetchSeating();
+      setAssigningSeat(null);
+      setSelectedUserId('');
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to update seating');
     } finally {
@@ -87,7 +109,7 @@ const Seating = () => {
                 <button
                   key={id}
                   disabled={!isAdminOrManager || assigning}
-                  onClick={() => assign(id)}
+                  onClick={() => openAssign(id)}
                   className={`p-4 rounded-xl border text-left transition ${
                     occupied ? 'bg-red-50 border-red-100 hover:bg-red-100' : 'bg-green-50 border-green-100 hover:bg-green-100'
                   } ${!isAdminOrManager ? 'cursor-default' : ''}`}
@@ -112,6 +134,51 @@ const Seating = () => {
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {isAdminOrManager && assigningSeat && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-8 shadow-2xl">
+            <h2 className="text-xl font-bold mb-4 text-gray-900">Assign Seat {assigningSeat}</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Employee</label>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="w-full p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Free (no assignment)</option>
+                  {employees.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} {e.department ? `(${e.department})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-4 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssigningSeat(null);
+                    setSelectedUserId('');
+                  }}
+                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmAssign}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-60"
+                  disabled={assigning}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

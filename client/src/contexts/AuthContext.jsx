@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import api from '../api/axios';
 
 const AuthContext = createContext();
 
@@ -29,10 +30,21 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = (userData) => {
-    setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
-    localStorage.setItem('token', userData.token);
+  const login = ({ token, ...userFromApi }) => {
+    setUser(userFromApi);
+    localStorage.setItem('user', JSON.stringify(userFromApi));
+    if (token) localStorage.setItem('token', token);
+  };
+
+  const refreshUser = async () => {
+    try {
+      const res = await api.get('/me');
+      setUser(res.data);
+      localStorage.setItem('user', JSON.stringify(res.data));
+    } catch (e) {
+      // If the session is invalid, the axios interceptor will handle redirect.
+      console.error('Failed to refresh user', e);
+    }
   };
 
   const logout = () => {
@@ -41,15 +53,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
   };
 
-  // For the Role Switcher requirement: allow forced role override for demo/testing
-  const switchRole = (newRole) => {
-    const updatedUser = { ...user, role: newRole };
-    setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
-  };
-
   return (
-    <AuthContext.Provider value={{ user, login, logout, switchRole, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

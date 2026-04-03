@@ -16,7 +16,8 @@ const Login = () => {
     setError('');
     try {
       const response = await api.post('/auth/login', { email, password });
-      login(response.data);
+      const { user: userFromApi, token } = response.data;
+      login({ ...userFromApi, token });
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');

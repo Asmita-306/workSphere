@@ -39,6 +39,11 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 
+// Current authenticated user snapshot (used by UI to refresh counters)
+app.get('/api/me', protect, async (req, res) => {
+  res.json(req.user);
+});
+
 // USERS
 app.get('/api/users', protect, authorizeRoles('admin', 'manager'), async (req, res) => {
   try {
@@ -63,20 +68,23 @@ app.delete('/api/users/:id', protect, authorizeRoles('admin'), async (req, res) 
 // FR1.1/FR1.3: Archive/unarchive + update role/department with history log
 app.patch('/api/users/:id', protect, authorizeRoles('admin'), async (req, res) => {
   try {
-    const { role, department, archived } = req.body || {};
+    const { role, department, archived, managerId } = req.body || {};
     const userToUpdate = await User.findByPk(req.params.id);
     if (!userToUpdate) return res.status(404).json({ message: 'User not found' });
 
     const oldRole = userToUpdate.role;
     const oldDepartment = userToUpdate.department;
     const oldArchived = userToUpdate.archived;
+    const oldManagerId = userToUpdate.managerId;
 
     const nextRole = role ?? userToUpdate.role;
     const nextDept = department ?? userToUpdate.department;
     const nextArchived = archived ?? userToUpdate.archived;
+    const nextManagerId = managerId ?? userToUpdate.managerId;
 
     userToUpdate.role = nextRole;
     userToUpdate.department = nextDept;
+    userToUpdate.managerId = nextManagerId;
     userToUpdate.archived = Boolean(nextArchived);
     userToUpdate.archivedAt = userToUpdate.archived ? new Date() : null;
 
@@ -133,14 +141,20 @@ app.get('/api/projects', protect, async (req, res) => {
     } else if (req.user.role === 'manager') {
       projects = await Project.findAll({ where: { managerId: req.user.id }, include });
     } else {
+      // Employee: only return projects where they are present in ProjectMembers.
+      // (Using explicit ProjectMember join is more reliable than `$TeamMembers.id$` filtering.)
+      const memberships = await ProjectMember.findAll({
+        where: { UserId: req.user.id },
+        attributes: ['ProjectId'],
+        raw: true
+      });
+
+      const projectIds = memberships.map((m) => m.ProjectId);
+      if (projectIds.length === 0) return res.json([]);
+
       projects = await Project.findAll({
-        include,
-        where: {
-          [Op.or]: [
-            { managerId: req.user.id },
-            { '$TeamMembers.id$': req.user.id }
-          ]
-        }
+        where: { id: { [Op.in]: projectIds } },
+        include
       });
     }
     res.json(projects);
@@ -451,21 +465,33 @@ app.get('/api/leave/my', protect, async (req, res) => {
     const level =
       req.user.role === 'admin' ? 'hr' : req.user.role === 'manager' ? 'manager' : null;
 
+    const include = [
+      { model: User, as: 'Employee', attributes: ['id', 'name', 'email'] }
+    ];
+    if (level) {
+      include.push({
+        model: LeaveApproval,
+        required: false,
+        where: { level, status: 'pending' }
+      });
+    }
+
     const leaves = await Leave.findAll({
       where: { employeeId: req.user.id },
-      include:
-        level
-          ? [
-              {
-                model: LeaveApproval,
-                required: false,
-                where: { level, status: 'pending' }
-              }
-            ]
-          : [],
+      include,
       order: [['createdAt', 'DESC']]
     });
-    res.json(leaves);
+
+    // Standard response shape for UI:
+    // { ..., user: { name, email }, ... }
+    const payload = leaves.map((l) => {
+      const json = l.toJSON();
+      json.user = { name: json.Employee?.name, email: json.Employee?.email };
+      delete json.Employee;
+      return json;
+    });
+
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -474,13 +500,26 @@ app.get('/api/leave/my', protect, async (req, res) => {
 app.get('/api/leave/pending', protect, authorizeRoles('admin', 'manager'), async (req, res) => {
   try {
     const level = req.user.role === 'admin' ? 'hr' : 'manager';
-    const whereClause = { status: 'pending' };
-    if (req.user.role === 'manager') whereClause.managerId = req.user.id;
+
+    let employeeIds = null;
+    if (req.user.role === 'manager') {
+      const employees = await User.findAll({
+        where: { managerId: req.user.id, archived: false },
+        attributes: ['id']
+      });
+      employeeIds = employees.map((e) => e.id);
+      if (employeeIds.length === 0) return res.json([]);
+    }
+
+    const whereClause = {
+      status: 'pending',
+      ...(req.user.role === 'manager' ? { employeeId: { [Op.in]: employeeIds } } : {})
+    };
 
     const leaves = await Leave.findAll({
       where: whereClause,
       include: [
-        { model: User, as: 'Employee', attributes: ['id', 'name'] },
+        { model: User, as: 'Employee', attributes: ['id', 'name', 'email'], required: true },
         {
           model: LeaveApproval,
           required: true,
@@ -489,7 +528,15 @@ app.get('/api/leave/pending', protect, authorizeRoles('admin', 'manager'), async
       ],
       order: [['createdAt', 'DESC']]
     });
-    res.json(leaves);
+
+    const payload = leaves.map((l) => {
+      const json = l.toJSON();
+      json.user = { name: json.Employee?.name, email: json.Employee?.email };
+      delete json.Employee;
+      return json;
+    });
+
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -509,8 +556,14 @@ app.put('/api/leave/:id', protect, authorizeRoles('admin', 'manager'), async (re
     const isManager = req.user.role === 'manager';
     const level = isManager ? 'manager' : 'hr';
 
-    if (isManager && String(leave.managerId) !== String(req.user.id)) {
-      return res.status(403).json({ message: 'Not allowed to approve this leave request' });
+    if (isManager) {
+      // Authorize using the employee's current managerId (Leave.managerId may be stale/null).
+      const employee = await User.findByPk(leave.employeeId, {
+        attributes: ['id', 'managerId']
+      });
+      if (!employee || String(employee.managerId) !== String(req.user.id)) {
+        return res.status(403).json({ message: 'Not allowed to approve this leave request' });
+      }
     }
 
     let approval = await LeaveApproval.findOne({ where: { leaveId: leave.id, level } });
@@ -520,6 +573,48 @@ app.put('/api/leave/:id', protect, authorizeRoles('admin', 'manager'), async (re
 
     if (!['approved', 'rejected'].includes(desiredStatus)) {
       return res.status(400).json({ message: 'status must be approved or rejected' });
+    }
+
+    // Deduct leave balance only when the leave transitions to fully approved.
+    // We simulate the "next" leave status based on all LeaveApprovals for this leave.
+    const previousLeaveStatus = leave.status;
+    let daysToDeduct = null;
+    if (desiredStatus === 'approved' && previousLeaveStatus !== 'approved') {
+      const approvalsBefore = await LeaveApproval.findAll({ where: { leaveId: leave.id } });
+
+      // Simulate updating the current approval level to `desiredStatus`.
+      const simulatedApprovals = approvalsBefore.map((a) => ({
+        level: a.level,
+        status: a.status
+      }));
+
+      const idx = simulatedApprovals.findIndex((a) => a.level === level);
+      if (idx >= 0) simulatedApprovals[idx].status = desiredStatus;
+      else simulatedApprovals.push({ level, status: desiredStatus });
+
+      const anyRejectedAfter = simulatedApprovals.some((a) => a.status === 'rejected');
+      const allApprovedAfter = simulatedApprovals.length > 0 && simulatedApprovals.every((a) => a.status === 'approved');
+      const nextLeaveStatus = anyRejectedAfter ? 'rejected' : allApprovedAfter ? 'approved' : 'pending';
+
+      if (nextLeaveStatus === 'approved') {
+        const days = calcInclusiveLeaveDays(leave.startDate, leave.endDate);
+        if (!days || days < 1) return res.status(400).json({ message: 'Invalid leave dates' });
+
+        const employee = await User.findByPk(leave.employeeId, {
+          attributes: ['id', 'totalLeaves', 'usedLeaves']
+        });
+        if (!employee) return res.status(404).json({ message: 'Employee not found' });
+
+        const totalLeaves = Number(employee.totalLeaves ?? 24);
+        const usedLeaves = Number(employee.usedLeaves ?? 0);
+        const remainingLeaves = totalLeaves - usedLeaves;
+
+        if (remainingLeaves < days) {
+          return res.status(400).json({ message: 'Not enough remaining leaves for this approval' });
+        }
+
+        daysToDeduct = days;
+      }
     }
 
     approval.status = desiredStatus;
@@ -543,6 +638,17 @@ app.put('/api/leave/:id', protect, authorizeRoles('admin', 'manager'), async (re
     }
 
     await leave.save();
+
+    if (daysToDeduct !== null && leave.status === 'approved') {
+      const employee = await User.findByPk(leave.employeeId, {
+        attributes: ['id', 'totalLeaves', 'usedLeaves']
+      });
+      if (employee) {
+        const usedLeaves = Number(employee.usedLeaves ?? 0);
+        employee.usedLeaves = usedLeaves + daysToDeduct;
+        await employee.save();
+      }
+    }
 
     res.json(leave);
   } catch (err) {
@@ -587,20 +693,37 @@ app.post('/api/leaves', protect, async (req, res) => {
 // GET /api/leaves
 app.get('/api/leaves', protect, async (req, res) => {
   try {
+    let employeeIds = null;
+    if (req.user.role === 'manager') {
+      const employees = await User.findAll({
+        where: { managerId: req.user.id, archived: false },
+        attributes: ['id']
+      });
+      employeeIds = employees.map((e) => e.id);
+      if (employeeIds.length === 0) return res.json([]);
+    }
+
     const whereClause =
       req.user.role === 'admin'
         ? {}
         : req.user.role === 'manager'
-          ? { managerId: req.user.id }
+          ? { employeeId: { [Op.in]: employeeIds } }
           : { employeeId: req.user.id };
 
     const leaves = await Leave.findAll({
       where: whereClause,
-      include: req.user.role === 'employee' ? [] : [{ model: User, as: 'Employee', attributes: ['id', 'name'] }],
+      include: [{ model: User, as: 'Employee', attributes: ['id', 'name', 'email'] }],
       order: [['createdAt', 'DESC']]
     });
 
-    res.json(leaves);
+    const payload = leaves.map((l) => {
+      const json = l.toJSON();
+      json.user = { name: json.Employee?.name, email: json.Employee?.email };
+      delete json.Employee;
+      return json;
+    });
+
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -621,8 +744,14 @@ app.patch('/api/leaves/:id', protect, authorizeRoles('admin', 'manager'), async 
     const isManager = req.user.role === 'manager';
     const level = isManager ? 'manager' : 'hr';
 
-    if (isManager && String(leave.managerId) !== String(req.user.id)) {
-      return res.status(403).json({ message: 'Not allowed to approve this leave request' });
+    if (isManager) {
+      // Authorize using the employee's current managerId (Leave.managerId may be stale/null).
+      const employee = await User.findByPk(leave.employeeId, {
+        attributes: ['id', 'managerId']
+      });
+      if (!employee || String(employee.managerId) !== String(req.user.id)) {
+        return res.status(403).json({ message: 'Not allowed to approve this leave request' });
+      }
     }
 
     let approval = await LeaveApproval.findOne({ where: { leaveId: leave.id, level } });
@@ -632,6 +761,47 @@ app.patch('/api/leaves/:id', protect, authorizeRoles('admin', 'manager'), async 
 
     if (!['approved', 'rejected'].includes(desiredStatus)) {
       return res.status(400).json({ message: 'status must be approved or rejected' });
+    }
+
+    // Deduct leave balance only when the leave transitions to fully approved.
+    const previousLeaveStatus = leave.status;
+    let daysToDeduct = null;
+    if (desiredStatus === 'approved' && previousLeaveStatus !== 'approved') {
+      const approvalsBefore = await LeaveApproval.findAll({ where: { leaveId: leave.id } });
+
+      const simulatedApprovals = approvalsBefore.map((a) => ({
+        level: a.level,
+        status: a.status
+      }));
+
+      const idx = simulatedApprovals.findIndex((a) => a.level === level);
+      if (idx >= 0) simulatedApprovals[idx].status = desiredStatus;
+      else simulatedApprovals.push({ level, status: desiredStatus });
+
+      const anyRejectedAfter = simulatedApprovals.some((a) => a.status === 'rejected');
+      const allApprovedAfter =
+        simulatedApprovals.length > 0 && simulatedApprovals.every((a) => a.status === 'approved');
+      const nextLeaveStatus = anyRejectedAfter ? 'rejected' : allApprovedAfter ? 'approved' : 'pending';
+
+      if (nextLeaveStatus === 'approved') {
+        const days = calcInclusiveLeaveDays(leave.startDate, leave.endDate);
+        if (!days || days < 1) return res.status(400).json({ message: 'Invalid leave dates' });
+
+        const employee = await User.findByPk(leave.employeeId, {
+          attributes: ['id', 'totalLeaves', 'usedLeaves']
+        });
+        if (!employee) return res.status(404).json({ message: 'Employee not found' });
+
+        const totalLeaves = Number(employee.totalLeaves ?? 24);
+        const usedLeaves = Number(employee.usedLeaves ?? 0);
+        const remainingLeaves = totalLeaves - usedLeaves;
+
+        if (remainingLeaves < days) {
+          return res.status(400).json({ message: 'Not enough remaining leaves for this approval' });
+        }
+
+        daysToDeduct = days;
+      }
     }
 
     approval.status = desiredStatus;
@@ -653,6 +823,17 @@ app.patch('/api/leaves/:id', protect, authorizeRoles('admin', 'manager'), async 
       leave.status = 'pending';
     }
     await leave.save();
+
+    if (daysToDeduct !== null && leave.status === 'approved') {
+      const employee = await User.findByPk(leave.employeeId, {
+        attributes: ['id', 'totalLeaves', 'usedLeaves']
+      });
+      if (employee) {
+        const usedLeaves = Number(employee.usedLeaves ?? 0);
+        employee.usedLeaves = usedLeaves + daysToDeduct;
+        await employee.save();
+      }
+    }
 
     res.json(leave);
   } catch (err) {
@@ -684,6 +865,18 @@ function parseHHMMToMinutes(t) {
   const mm = Number(m[2]);
   if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
   return hh * 60 + mm;
+}
+
+function calcInclusiveLeaveDays(startDate, endDate) {
+  // Inclusive: if start=end, days=1.
+  const s = new Date(startDate);
+  const e = new Date(endDate);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return 0;
+
+  const sUTC = Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate());
+  const eUTC = Date.UTC(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate());
+  const diffDays = Math.floor((eUTC - sUTC) / (24 * 60 * 60 * 1000));
+  return diffDays + 1;
 }
 
 function rangesOverlap(startA, endA, startB, endB) {
@@ -727,7 +920,7 @@ async function assertNoFacilityDoubleBooking({ facilityName, dateOnly, fromTime,
 }
 
 // FACILITIES
-app.post('/api/facilities', protect, async (req, res) => {
+app.post('/api/facilities', protect, authorizeRoles('employee', 'manager'), async (req, res) => {
   try {
     const {
       facilityId,
@@ -787,9 +980,7 @@ app.post('/api/facilities', protect, async (req, res) => {
 
 app.get('/api/facilities', protect, async (req, res) => {
   try {
-    const whereClause = req.user.role === 'employee' ? { employeeId: req.user.id } : {};
     const facilities = await Facility.findAll({
-      where: whereClause,
       order: [['createdAt', 'DESC']]
     });
     res.json(facilities);
@@ -814,7 +1005,7 @@ app.put('/api/facilities/:id', protect, authorizeRoles('admin', 'manager'), asyn
 
 // Facilities aliases (spec-friendly)
 // POST /api/facilities/book
-app.post('/api/facilities/book', protect, async (req, res) => {
+app.post('/api/facilities/book', protect, authorizeRoles('employee', 'manager'), async (req, res) => {
   try {
     const {
       facilityId,
