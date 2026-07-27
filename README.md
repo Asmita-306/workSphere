@@ -456,4 +456,4 @@ Backend testing scripts are **To be updated**.
 - Asmita Ch
 - D-Varshitha
 ## try out link
-https://work-sphere-vdha.vercel.app/login 
+https://work-sphere-vdha.vercel.app
